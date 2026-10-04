@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>DocuCast - PDF &amp; Word in Audiopodcasts verwandeln (PWA)</title>
+    <meta name="description" content="Dokumente in Audiopodcasts umwandeln: PDF und Word clientseitig einlesen, Zwei-Sprecher-Skript erzeugen, vorlesen und als WAV speichern - ohne Upload, ohne Konto, im Browser." />
+    <meta name="keywords" content="PDF in Podcast, Word vorlesen, Dokument zu Audio, Text to Speech, PWA, Offline, Audiopodcast, Lernhilfe" />
+    <meta name="author" content="CSTRSK" />
+    <meta name="copyright" content="© 2008–2026 CSTRSK Software. Alle Rechte vorbehalten." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://cstrsk.de/DocuCast/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://cstrsk.de/DocuCast/" />
+    <meta property="og:title" content="DocuCast - PDF &amp; Word in Audiopodcasts verwandeln" />
+    <meta property="og:description" content="PDF und Word im Browser in Zwei-Sprecher-Audiopodcasts umwandeln, vorlesen und als WAV speichern - ohne Upload, ohne Konto." />
+    <meta property="og:image" content="https://cstrsk.de/DocuCast/pwa-512x512.png" />
+    <meta property="og:locale" content="de_DE" />
+    <meta property="og:site_name" content="CSTRSK" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DocuCast" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "DocuCast",
+      "url": "https://cstrsk.de/DocuCast/",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Web",
+      "browserRequirements": "Moderner Browser mit Web Speech API (Chrome, Edge, Safari)",
+      "description": "Clientseitige Progressive Web App, die PDF- und Word-Dokumente in Zwei-Sprecher-Audiopodcasts umwandelt: Textextraktion im Browser, Dialogskript, Vorlesen und WAV-Export.",
+      "inLanguage": "de",
+      "isAccessibleForFree": true,
+      "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"},
+      "author": {"@type": "Organization", "name": "CSTRSK"},
+      "publisher": {"@type": "Organization", "name": "CSTRSK", "url": "https://cstrsk.de/"},
+      "license": "https://www.gnu.org/licenses/agpl-3.0.html"
+    }
+    </script>
+    <script>
+      (function() {
+        try {
+          const stored = localStorage.getItem('docucast_theme');
+          const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const isDark = stored !== null ? stored === 'dark' : prefersDark;
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  </head>
+  <body class="antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+    <div id="root"></div>
+    <img src="/track.php?p=DocuCast" width="1" height="1" alt="" style="position:fixed;left:-9999px" />
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
