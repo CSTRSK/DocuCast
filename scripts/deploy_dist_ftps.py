@@ -24,6 +24,7 @@ import ftplib
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
 
 UA = {"User-Agent": "deploy-verify/1.0", "Cache-Control": "no-cache"}
@@ -96,7 +97,12 @@ def verify(base_url: str) -> int:
     for ref in re.findall(r'(?:src|href)="([^"]+)"', html):
         if ref.startswith(("http://", "https://", "data:", "#", "mailto:")):
             continue
-        url = base + ref.lstrip("./")
+        # '/track.php?p=X' ist WURZEL-relativ, nicht ordner-relativ: base + ref wuerde
+        # /<Projekt>/track.php ergeben und einen 404 melden, den es nicht gibt.
+        if ref.startswith("/"):
+            url = urllib.parse.urljoin(base, ref)
+        else:
+            url = base + ref.lstrip("./")
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
                 status = r.status
