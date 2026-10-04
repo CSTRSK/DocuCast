@@ -20,8 +20,9 @@ bleibt.
 ## Funktionen
 
 - **Formate:** PDF (.pdf), Word (.docx), Text (.txt, .md) — inklusive drei beiliegender Beispieldokumente zum Sofort-Testen
-- **Vier Erzählstile:** Deep Dive (~5–8 Min), Kompakt/TL;DR (~2–3 Min), Experten-Interview (~4–6 Min), Diskussion & Story (~5–7 Min)
-- **Zwei Sprecher:** eigene Namen für Host A und Host B, Sprache Deutsch oder Englisch
+- **Sieben Erzählstile:** Deep Dive (~5–8 Min), Kompakt/TL;DR (~2–3 Min), Experten-Interview (~4–6 Min), Diskussion & Story (~5–7 Min), Kontroverse & Debatte (~4–6 Min), Tech-Deep-Dive (~5–8 Min), 2-Minuten News-Flash (~2 Min)
+- **Zwei Sprecher:** eigene Namen für Host A und Host B
+- **G20-Lokalisierung:** über 30 Sprachvarianten — Deutsch (Standard, Nord, Bayern, Österreich, Schweiz), Englisch (General American, UK, Australien, Schottland), Spanisch (u. a. Rioplatense-AR), Französisch (u. a. CA), dazu u. a. Japanisch, Koreanisch, Chinesisch, Hindi, Arabisch, Russisch, Türkisch, Indonesisch, Polnisch, Niederländisch. Mit der Landesauswahl wechseln Gesprächsführung und Moderatorennamen
 - **Vorlesen:** Web Speech API, automatische Stimmenwahl je Sprache, unterschiedliche Stimmen für beide Sprecher (wenn das Gerät zwei anbietet), Tempo 0,75×–2×, Sprünge von 15 Sekunden
 - **Transkript:** laufender Beitrag wird hervorgehoben, Tippen springt zur Stelle
 - **Bibliothek:** Podcasts lokal in IndexedDB, Favoriten, Löschen
@@ -35,6 +36,7 @@ bleibt.
 - **Die WAV-Datei enthält keine Sprache.** Der Browser kann die System-Sprachausgabe nicht mitschneiden. Der Export liefert die selbst berechnete Tonspur des Dialogs: Intro-Gong, je Sprecher eine Tonhöhen-Kontur (130 Hz Host A, 210 Hz Host B, bandpassgefiltert), Übergangstöne — exakt in der Länge des Skripts. Gemessen: rund 7,85 MB für ein Fünf-Minuten-Skript. Für echte Sprachaufnahmen braucht es ein Aufnahmegerät am Rechner, das den Systemklang abgreift.
 - **Kein Server, also keine Synchronisation.** Wird der Browser-Speicher geleert oder das Gerät gewechselt, ist die Bibliothek weg — dafür ist der Export gedacht.
 - **Sehr lange Dokumente** erzeugen sehr viele Beiträge; dafür gibt es den Stil „Kompakt".
+- **Lokalisierung ohne Server übersetzt nur die Gesprächsführung.** Die App kann den Dialog in über 30 Sprachvarianten erzeugen — Begrüßung, Übergänge, Rückfragen, Verabschiedung und Moderatorennamen kommen in der Zielsprache, die **Inhaltssätze bleiben in der Sprache des Dokuments**. Ein durchgehend übersetzter Podcast bräuchte einen Übersetzungsdienst auf einem Server (mit Schlüssel) und würde den Dokumenttext aus dem Gerät schicken — genau das vermeidet diese App. Ein Hinweis darauf steht im Übersetzungsdialog.
 
 ## Entwicklung
 

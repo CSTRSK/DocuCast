@@ -2,19 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PodcastItem } from '../types/podcast';
 import { ttsEngine, TTSState } from '../services/ttsEngine';
 import { WaveformVisualizer } from './WaveformVisualizer';
-import { Play, Pause, RotateCcw, RotateCw, Download, Check, Bookmark } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Download, Check, Bookmark, Globe } from 'lucide-react';
 import { generateSynthesizedPodcastWav, downloadFile } from '../services/audioExporter';
 import { saveAudioBlob } from '../services/storage';
+import { G20TranslateModal } from './G20TranslateModal';
 
 interface PodcastPlayerProps {
   podcast: PodcastItem;
   onSaveFavorite?: (id: string) => void;
+  onUpdatePodcast?: (newPodcast: PodcastItem) => void;
   isFavorite?: boolean;
 }
 
 export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   podcast,
   onSaveFavorite,
+  onUpdatePodcast,
   isFavorite = false
 }) => {
   const [ttsState, setTtsState] = useState<TTSState>(ttsEngine.getState());
@@ -22,11 +25,13 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   const [isExportingAudio, setIsExportingAudio] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportDone, setExportDone] = useState(false);
+  const [showTranslateModal, setShowTranslateModal] = useState(false);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const activeSegmentRef = useRef<HTMLDivElement>(null);
 
   // Subscribe to TTS changes & load segments whenever podcast or segments change
   useEffect(() => {
+    ttsEngine.autoAssignVoices(podcast.language || 'de', true);
     ttsEngine.loadSegments(podcast.segments, podcast.id);
     const unsubscribe = ttsEngine.subscribe((state) => {
       setTtsState(state);
@@ -35,7 +40,7 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     return () => {
       unsubscribe();
     };
-  }, [podcast.id, podcast.segments]);
+  }, [podcast.id, podcast.segments, podcast.language]);
 
   // Auto-scroll transcript to active segment
   useEffect(() => {
@@ -86,6 +91,14 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     }
   };
 
+  const handleTranslationComplete = (translatedPodcast: PodcastItem) => {
+    ttsEngine.autoAssignVoices(translatedPodcast.language || 'de', true);
+    ttsEngine.loadSegments(translatedPodcast.segments, translatedPodcast.id);
+    if (onUpdatePodcast) {
+      onUpdatePodcast(translatedPodcast);
+    }
+  };
+
   const currentSpeaker = ttsState.currentSegment?.speaker || 'hostA';
   const currentSpeakerName = ttsState.currentSegment?.speakerName || 'Alex';
   const isHostA = currentSpeaker === 'hostA';
@@ -104,9 +117,12 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
         {/* Top Info Bar */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="min-w-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-500/20">
-              {podcast.style.toUpperCase()} PODCAST
-            </span>
+            <div className="flex items-center gap-2">
+              {podcast.flag && <span className="text-xl">{podcast.flag}</span>}
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-500/20">
+                {podcast.style.toUpperCase()} PODCAST
+              </span>
+            </div>
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1.5 truncate">
               {podcast.title}
             </h2>
@@ -115,19 +131,31 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             </p>
           </div>
 
-          {onSaveFavorite && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* G20 Translate Button */}
             <button
-              onClick={() => onSaveFavorite(podcast.id)}
-              className={`p-2.5 rounded-2xl border transition-all shadow-sm ${
-                isFavorite
-                  ? 'bg-amber-50 text-amber-600 border-amber-300 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/30'
-                  : 'bg-white hover:bg-slate-50 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-white'
-              }`}
-              title="Als Favorit markieren"
+              onClick={() => setShowTranslateModal(true)}
+              className="p-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 transition-all shadow-sm active:scale-95 flex items-center gap-1.5"
+              title="Podcast in andere G20-Sprache übersetzen"
             >
-              <Bookmark className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+              <Globe className="w-4 h-4" />
+              <span className="text-xs font-semibold hidden sm:inline">G20</span>
             </button>
-          )}
+
+            {onSaveFavorite && (
+              <button
+                onClick={() => onSaveFavorite(podcast.id)}
+                className={`p-2.5 rounded-2xl border transition-all shadow-sm ${
+                  isFavorite
+                    ? 'bg-amber-50 text-amber-600 border-amber-300 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/30'
+                    : 'bg-white hover:bg-slate-50 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="Als Favorit markieren"
+              >
+                <Bookmark className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Waveform Visualizer */}
@@ -326,6 +354,14 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
           })}
         </div>
       </div>
+
+      {/* G20 Translation Modal */}
+      <G20TranslateModal
+        isOpen={showTranslateModal}
+        onClose={() => setShowTranslateModal(false)}
+        podcast={podcast}
+        onTranslationComplete={handleTranslationComplete}
+      />
     </div>
   );
 };

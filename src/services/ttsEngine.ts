@@ -94,39 +94,39 @@ class TTSEngine {
 
   /**
    * Intelligente Stimmenzuordnung:
-   * Wenn deutsche Stimmen vorhanden sind, dürfen NIEMALS englische Stimmen für deutsche Texte
-   * vergeben werden, da dies zu Synthesizer-Abbrüchen oder Stimmensalat führt!
+   * Wenn Stimmen in der gewünschten Zielsprache vorhanden sind, werden diese bevorzugt.
+   * Bei Sprachwechsel (z. B. G20-Übersetzung nach Englisch, Französisch, Japanisch)
+   * werden die Stimmen automatisch auf passende Zielstimmen umgestellt.
    */
-  public autoAssignVoices(preferredLang: string = 'de') {
+  public autoAssignVoices(preferredLang: string = 'de', forceReassign: boolean = true) {
     if (!this.voices || this.voices.length === 0) return;
 
     const langPrefix = preferredLang.toLowerCase().slice(0, 2);
     const langVoices = this.voices.filter((v) => v.lang.toLowerCase().startsWith(langPrefix));
     const pool = langVoices.length > 0 ? langVoices : this.voices;
 
-    if (pool.length >= 2) {
-      // Zwei verschiedene Stimmen in der gewünschten Sprache
-      if (!this.settings.hostAVoiceURI) {
+    const currentVoiceA = this.voices.find((v) => v.voiceURI === this.settings.hostAVoiceURI);
+    const currentVoiceMatches = currentVoiceA && currentVoiceA.lang.toLowerCase().startsWith(langPrefix);
+
+    if (forceReassign || !currentVoiceMatches || !this.settings.hostAVoiceURI) {
+      if (pool.length >= 2) {
         this.settings.hostAVoiceURI = pool[0].voiceURI;
-      }
-      if (!this.settings.hostBVoiceURI) {
-        const secondVoice = pool.find((v) => v.voiceURI !== this.settings.hostAVoiceURI) || pool[1];
+        const secondVoice = pool.find((v) => v.voiceURI !== pool[0].voiceURI) || pool[1];
         this.settings.hostBVoiceURI = secondVoice.voiceURI;
+        this.settings.hostAPitch = 0.92;
+        this.settings.hostBPitch = 1.18;
+        this.settings.hostARate = 1.0;
+        this.settings.hostBRate = 1.03;
+      } else if (pool.length === 1) {
+        this.settings.hostAVoiceURI = pool[0].voiceURI;
+        this.settings.hostBVoiceURI = pool[0].voiceURI;
+        this.settings.hostAPitch = 0.88;
+        this.settings.hostBPitch = 1.25;
+        this.settings.hostARate = 0.98;
+        this.settings.hostBRate = 1.05;
       }
-      this.settings.hostAPitch = 0.92;
-      this.settings.hostBPitch = 1.18;
-      this.settings.hostARate = 1.0;
-      this.settings.hostBRate = 1.03;
-    } else if (pool.length === 1) {
-      // Nur eine Stimme vorhanden (z. B. Chrome auf Linux/Android mit nur einer deutschen Stimme)
-      // Beide Hosts nutzen dieselbe deutsche Stimme, aber mit DEUTLICH unterschiedlicher Tonhöhe und Tempo!
-      this.settings.hostAVoiceURI = pool[0].voiceURI;
-      this.settings.hostBVoiceURI = pool[0].voiceURI;
-      this.settings.hostAPitch = 0.88; // Tiefe, ruhige Moderatorenstimme
-      this.settings.hostBPitch = 1.25; // Hellere, dynamische Analystenstimme
-      this.settings.hostARate = 0.98;
-      this.settings.hostBRate = 1.05;
     }
+    this.notify();
   }
 
   public subscribe(listener: TTSListener): () => void {

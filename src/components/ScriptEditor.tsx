@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { TranscriptSegment, PodcastItem } from '../types/podcast';
-import { Play, Edit3, Trash2, ArrowUpDown, Plus, Download, Save, Check } from 'lucide-react';
+import { Play, Edit3, Trash2, ArrowUpDown, Plus, Download, Save, Check, Globe } from 'lucide-react';
 import { exportScriptAsMarkdown, exportScriptAsJSON, downloadFile } from '../services/audioExporter';
+import { G20TranslateModal } from './G20TranslateModal';
 
 interface ScriptEditorProps {
   podcast: PodcastItem;
   onUpdateSegments: (newSegments: TranscriptSegment[]) => void;
+  onUpdatePodcast?: (newPodcast: PodcastItem) => void;
   onStartPlayback: () => void;
   onSaveToLibrary: () => void;
 }
@@ -13,12 +15,14 @@ interface ScriptEditorProps {
 export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   podcast,
   onUpdateSegments,
+  onUpdatePodcast,
   onStartPlayback,
   onSaveToLibrary
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savedNotification, setSavedNotification] = useState(false);
+  const [showTranslateModal, setShowTranslateModal] = useState(false);
 
   // Extract active speaker names from the podcast
   const hostAName = podcast.segments.find((s) => s.speaker === 'hostA')?.speakerName || 'Alex';
@@ -91,6 +95,14 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     setTimeout(() => setSavedNotification(false), 2500);
   };
 
+  const handleTranslationComplete = (translatedPodcast: PodcastItem) => {
+    if (onUpdatePodcast) {
+      onUpdatePodcast(translatedPodcast);
+    } else {
+      onUpdateSegments(translatedPodcast.segments);
+    }
+  };
+
   const totalWords = podcast.segments.reduce(
     (acc, s) => acc + s.text.split(/\s+/).filter(Boolean).length,
     0
@@ -100,8 +112,11 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     <div className="space-y-4">
       {/* Script Summary Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div>
-          <h2 className="font-bold text-slate-900 dark:text-white text-base truncate">{podcast.title}</h2>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {podcast.flag && <span className="text-xl">{podcast.flag}</span>}
+            <h2 className="font-bold text-slate-900 dark:text-white text-base truncate">{podcast.title}</h2>
+          </div>
           <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             <span>{podcast.segments.length} Dialogzeilen</span>
             <span>•</span>
@@ -111,7 +126,17 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* G20 Translation Button */}
+          <button
+            onClick={() => setShowTranslateModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 transition-all shadow-sm active:scale-95"
+            title="Podcast in eine G20-Sprache übersetzen"
+          >
+            <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>G20 Übersetzung</span>
+          </button>
+
           <button
             onClick={handleSaveClick}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
@@ -258,6 +283,14 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
           </button>
         </div>
       </div>
+
+      {/* G20 Translation Modal */}
+      <G20TranslateModal
+        isOpen={showTranslateModal}
+        onClose={() => setShowTranslateModal(false)}
+        podcast={podcast}
+        onTranslationComplete={handleTranslationComplete}
+      />
     </div>
   );
 };

@@ -12,6 +12,7 @@ import { ScriptEditor } from './components/ScriptEditor';
 import { PodcastPlayer } from './components/PodcastPlayer';
 import { PodcastLibrary } from './components/PodcastLibrary';
 import { ExtractedDocument, PodcastConfig, PodcastItem, TranscriptSegment } from './types/podcast';
+import { G20_COUNTRIES } from './data/g20Countries';
 import { generatePodcastScript } from './services/scriptGenerator';
 import { savePodcast, getAllPodcasts, deletePodcast, toggleFavoritePodcast } from './services/storage';
 import { ttsEngine, TTSState } from './services/ttsEngine';
@@ -85,6 +86,7 @@ export default function App() {
       const segments = await generatePodcastScript(currentDocument, config);
 
       const totalDuration = segments.reduce((sum, s) => sum + s.estimatedDuration, 0);
+      const targetCountry = G20_COUNTRIES.find((c) => c.id === config.countryId) || G20_COUNTRIES[0];
 
       const newPodcast: PodcastItem = {
         id: `pod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -93,11 +95,18 @@ export default function App() {
         documentSize: currentDocument.size,
         wordCount: currentDocument.wordCount,
         style: config.style,
+        language: config.language || targetCountry.langPrefix,
+        countryId: config.countryId || targetCountry.id,
+        flag: targetCountry.flag,
         segments,
         totalEstimatedSeconds: totalDuration,
         createdAt: Date.now(),
         isFavorite: false
       };
+
+      // Configure TTS voices for this podcast language
+      ttsEngine.autoAssignVoices(newPodcast.language || 'de', true);
+      ttsEngine.loadSegments(newPodcast.segments, newPodcast.id);
 
       // Persist in IndexedDB immediately
       await savePodcast(newPodcast);
@@ -111,6 +120,14 @@ export default function App() {
       setIsGenerating(false);
       alert('Podcast-Skript konnte nicht generiert werden: ' + (err.message || 'Unbekannter Fehler'));
     }
+  };
+
+  const handleUpdatePodcast = async (updatedPodcast: PodcastItem) => {
+    setCurrentPodcast(updatedPodcast);
+    ttsEngine.autoAssignVoices(updatedPodcast.language || 'de', true);
+    ttsEngine.loadSegments(updatedPodcast.segments, updatedPodcast.id);
+    await savePodcast(updatedPodcast);
+    await loadLibrary();
   };
 
   const handleUpdateSegments = async (newSegments: TranscriptSegment[]) => {
@@ -287,6 +304,7 @@ export default function App() {
             <ScriptEditor
               podcast={currentPodcast}
               onUpdateSegments={handleUpdateSegments}
+              onUpdatePodcast={handleUpdatePodcast}
               onStartPlayback={handleStartPlayback}
               onSaveToLibrary={handleSaveToLibrary}
             />
@@ -301,6 +319,7 @@ export default function App() {
                 podcast={currentPodcast}
                 isFavorite={currentPodcast.isFavorite}
                 onSaveFavorite={handleToggleFavorite}
+                onUpdatePodcast={handleUpdatePodcast}
               />
             ) : (
               <div className="rounded-3xl border-2 border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/40 p-12 text-center space-y-3 shadow-sm">
@@ -346,6 +365,7 @@ export default function App() {
               onToggleFavorite={handleToggleFavorite}
               onDeletePodcast={handleDeletePodcast}
               onNewPodcast={handleNewPodcast}
+              onUpdatePodcast={handleUpdatePodcast}
             />
           </div>
         )}

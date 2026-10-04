@@ -1,5 +1,5 @@
 /**
- * Typdefinitionen für DocuCast PWA
+ * Typdefinitionen für DocuCast PWA mit G20-Staaten & Sprachvariationen
  */
 
 export type DocumentType = 'pdf' | 'docx' | 'text';
@@ -15,6 +15,7 @@ export interface ExtractedDocument {
   extractedText: string;
   sections: DocumentSection[];
   createdAt: number;
+  originalLanguage?: string;
 }
 
 export interface DocumentSection {
@@ -24,13 +25,35 @@ export interface DocumentSection {
   keyPoints: string[];
 }
 
-export type PodcastStyle = 'deep_dive' | 'tldr' | 'interview' | 'storytelling';
+export type PodcastStyle = 
+  | 'deep_dive'       // Ausführliche Diskussion
+  | 'tldr'            // Kompakt
+  | 'interview'       // Experten-Interview
+  | 'storytelling'    // Locker & Erzählung
+  | 'debate'          // Pro / Contra Debatte
+  | 'tech_explainer'  // Technischer Deep Dive
+  | 'news_flash';     // Breaking News Radio-Flash
+
+export interface G20Country {
+  id: string;
+  countryCode: string;
+  countryName: string;
+  flag: string;
+  langCode: string;
+  langPrefix: string;
+  langName: string;
+  variationLabel: string;
+  defaultHostA: string;
+  defaultHostB: string;
+  region: 'Europe' | 'Americas' | 'Asia-Pacific' | 'Middle East & Africa';
+}
 
 export interface PodcastConfig {
   title: string;
   style: PodcastStyle;
-  language: 'de' | 'en';
-  targetDurationMinutes: number; // e.g. 2, 5, 10
+  language: string;       // e.g. 'de', 'en', 'fr', 'es', 'ja', 'zh', 'it', 'pt', 'ru', 'ar', 'hi', 'tr', 'ko', 'id'
+  countryId?: string;     // e.g. 'de-DE', 'en-US', 'ja-JP'
+  targetDurationMinutes: number;
   hostAName: string;
   hostBName: string;
   hostARole: string;
@@ -54,6 +77,9 @@ export interface PodcastItem {
   documentSize: number;
   wordCount: number;
   style: PodcastStyle;
+  language?: string;
+  countryId?: string;
+  flag?: string;
   segments: TranscriptSegment[];
   totalEstimatedSeconds: number;
   createdAt: number;
@@ -78,4 +104,12 @@ export interface ExtractionProgress {
   totalPages?: number;
   message: string;
   error?: string;
+}
+
+export interface TranslationProgress {
+  isTranslating: boolean;
+  targetCountry?: G20Country;
+  progressPercent: number;
+  currentSegment?: number;
+  totalSegments?: number;
 }

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { PodcastItem } from '../types/podcast';
-import { Play, Bookmark, Trash2, Download, Search, FileAudio, FileText } from 'lucide-react';
+import { Play, Bookmark, Trash2, Download, Search, FileAudio, FileText, Globe } from 'lucide-react';
 import { exportScriptAsMarkdown, downloadFile, generateSynthesizedPodcastWav } from '../services/audioExporter';
 import { getAudioBlob, saveAudioBlob } from '../services/storage';
+import { G20TranslateModal } from './G20TranslateModal';
 
 interface PodcastLibraryProps {
   podcasts: PodcastItem[];
@@ -10,6 +11,7 @@ interface PodcastLibraryProps {
   onToggleFavorite: (id: string) => void;
   onDeletePodcast: (id: string) => void;
   onNewPodcast: () => void;
+  onUpdatePodcast?: (podcast: PodcastItem) => void;
 }
 
 export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
@@ -17,11 +19,13 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
   onSelectPodcast,
   onToggleFavorite,
   onDeletePodcast,
-  onNewPodcast
+  onNewPodcast,
+  onUpdatePodcast
 }) => {
   const [filter, setFilter] = useState<'all' | 'favorites'>('all');
   const [search, setSearch] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [translatingPodcast, setTranslatingPodcast] = useState<PodcastItem | null>(null);
 
   const filtered = podcasts.filter((p) => {
     if (filter === 'favorites' && !p.isFavorite) return false;
@@ -50,7 +54,7 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
       downloadFile(blob, `${podcast.title.replace(/\s+/g, '_')}.wav`, 'audio/wav');
       setDownloadingId(null);
     } catch (err) {
-      console.error('Audio download error:', err);
+      console.error('Download error:', err);
       setDownloadingId(null);
     }
   };
@@ -58,27 +62,26 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
   const handleExportMarkdown = (e: React.MouseEvent, podcast: PodcastItem) => {
     e.stopPropagation();
     const md = exportScriptAsMarkdown(podcast);
-    downloadFile(md, `${podcast.title.replace(/\s+/g, '_')}_transkript.md`, 'text/markdown');
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    downloadFile(blob, `${podcast.title.replace(/\s+/g, '_')}_Skript.md`, 'text/markdown');
   };
 
   return (
     <div className="space-y-4">
-      {/* Top Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
-        {/* Search */}
+      {/* Search & Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400 dark:text-slate-500" />
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Podcasts oder Themen durchsuchen..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none shadow-sm"
+            placeholder="In Episoden & Transkripten suchen..."
+            className="w-full pl-10 pr-4 py-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-sm"
           />
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 self-start sm:self-auto bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 self-start sm:self-auto shadow-sm">
           <button
             onClick={() => setFilter('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
@@ -91,9 +94,9 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
           </button>
           <button
             onClick={() => setFilter('favorites')}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
               filter === 'favorites'
-                ? 'bg-amber-500 text-white font-bold shadow-sm'
+                ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -139,6 +142,7 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
+                    {item.flag && <span className="text-base">{item.flag}</span>}
                     <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-500/20">
                       {item.style}
                     </span>
@@ -163,6 +167,18 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
 
               {/* Action buttons */}
               <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                {/* G20 Translation button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTranslatingPodcast(item);
+                  }}
+                  className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all border border-slate-200 dark:border-slate-800"
+                  title="In G20-Sprache übersetzen"
+                >
+                  <Globe className="w-4 h-4" />
+                </button>
+
                 <button
                   onClick={(e) => handleDownloadAudio(e, item)}
                   disabled={downloadingId === item.id}
@@ -213,6 +229,19 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
             </div>
           ))}
         </div>
+      )}
+
+      {/* G20 Translation Modal for Library */}
+      {translatingPodcast && (
+        <G20TranslateModal
+          isOpen={!!translatingPodcast}
+          onClose={() => setTranslatingPodcast(null)}
+          podcast={translatingPodcast}
+          onTranslationComplete={(translated) => {
+            onUpdatePodcast?.(translated);
+            setTranslatingPodcast(null);
+          }}
+        />
       )}
     </div>
   );
