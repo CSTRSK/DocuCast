@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PodcastItem } from '../types/podcast';
 import { Play, Bookmark, Trash2, Download, Search, FileAudio, FileText, Globe } from 'lucide-react';
-import { exportScriptAsMarkdown, downloadFile, generateSynthesizedPodcastWav } from '../services/audioExporter';
+import { exportScriptAsMarkdown, downloadFile, generatePodcastWav } from '../services/audioExporter';
 import { getAudioBlob, saveAudioBlob } from '../services/storage';
 import { G20TranslateModal } from './G20TranslateModal';
 
@@ -47,7 +47,7 @@ export const PodcastLibrary: React.FC<PodcastLibraryProps> = ({
       // Check if already in IndexedDB / OPFS
       let blob = await getAudioBlob(podcast.id);
       if (!blob) {
-        blob = await generateSynthesizedPodcastWav(podcast);
+        blob = (await generatePodcastWav(podcast)).blob;
         await saveAudioBlob(podcast.id, blob);
       }
 

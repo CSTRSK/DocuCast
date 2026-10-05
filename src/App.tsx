@@ -11,6 +11,9 @@ import { GenerationSettings } from './components/GenerationSettings';
 import { ScriptEditor } from './components/ScriptEditor';
 import { PodcastPlayer } from './components/PodcastPlayer';
 import { PodcastLibrary } from './components/PodcastLibrary';
+import { VoiceManager } from './components/VoiceManager';
+import * as piperEngine from './services/piperEngine';
+import { generateNeuralPodcastWav, generatePodcastWav } from './services/audioExporter';
 import { ExtractedDocument, PodcastConfig, PodcastItem, TranscriptSegment } from './types/podcast';
 import { G20_COUNTRIES } from './data/g20Countries';
 import { generatePodcastScript } from './services/scriptGenerator';
@@ -26,6 +29,16 @@ export default function App() {
   const [podcasts, setPodcasts] = useState<PodcastItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [ttsState, setTtsState] = useState<TTSState>(ttsEngine.getState());
+
+  // Testhaken für automatisierte Prüfläufe (kein Inhalt, keine Schlüssel, rein lokal):
+  // Die Sprachausgabe lässt sich damit ohne Klickfolge prüfen.
+  useEffect(() => {
+    (window as any).__docucastTest = {
+      ttsEngine,
+      piper: piperEngine,
+      audio: { generateNeuralPodcastWav, generatePodcastWav },
+    };
+  }, []);
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('docucast_theme');
@@ -370,6 +383,9 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Tab 6: Stimmen (Sprachausgabe) */}
+      {currentTab === 'stimmen' && <VoiceManager />}
 
       {/* Mobile-First Bottom Navigation Bar */}
       <BottomNavigation

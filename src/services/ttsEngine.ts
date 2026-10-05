@@ -6,6 +6,7 @@
  */
 
 import { TranscriptSegment, VoiceSettings } from '../types/podcast';
+import { synthese, stimmeGeladen } from './piperEngine';
 
 export interface TTSState {
   isPlaying: boolean;
@@ -14,6 +15,12 @@ export interface TTSState {
   currentSegment: TranscriptSegment | null;
   progressPercent: number;
   availableVoices: SpeechSynthesisVoice[];
+  /** Neuronale Stimme rechnet gerade (erster Satz braucht einen Moment) */
+  isSynthesizing?: boolean;
+  /** Klangquelle: Gerätestimmen oder neuronale Stimme vom Gerät */
+  engine?: 'geraet' | 'piper';
+  /** Grund, falls die neuronale Stimme nicht benutzt werden konnte */
+  engineHinweis?: string;
 }
 
 export type TTSListener = (state: TTSState) => void;
@@ -43,10 +50,25 @@ class TTSEngine {
     hostBVoiceURI: '',
     hostBPitch: 1.22,
     hostBRate: 1.04,
-    playbackRate: 1.0
+    playbackRate: 1.0,
+    engine: 'geraet',
+    piperHostAVoice: '',
+    piperHostBVoice: ''
   };
 
+  // Neuronale Wiedergabe (Piper): fertige Sätze werden als Audiodatei zwischengespeichert,
+  // damit Pause, Wiederholen und Suchen sofort reagieren.
+  private piperAudio: HTMLAudioElement | null = null;
+  private piperCache: Map<string, string> = new Map();
+  private piperCacheReihenfolge: string[] = [];
+  private piperFehler: boolean = false;
+  private piperBusy: boolean = false;
+
+  private readonly SPEICHER_KEY = 'docucast.voiceSettings';
+
   constructor() {
+    this.ladeEinstellungen();
+
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       this.synth = window.speechSynthesis;
       this.initVoices();
@@ -86,9 +108,75 @@ class TTSEngine {
   }
 
   public updateVoiceSettings(newSettings: Partial<VoiceSettings>) {
+    const engineWechselt =
+      newSettings.engine !== undefined && newSettings.engine !== this.settings.engine;
+
     this.settings = { ...this.settings, ...newSettings };
     if (newSettings.playbackRate) {
       this.playbackRate = newSettings.playbackRate;
+      if (this.piperAudio) {
+        // Tempo wirkt sofort, auch mitten im Satz
+        try {
+          this.piperAudio.playbackRate = Math.max(0.5, Math.min(2.0, this.playbackRate));
+        } catch {
+          /* egal */
+        }
+      }
+    }
+    this.speichereEinstellungen();
+
+    if (engineWechselt) {
+      // Beim Wechsel der Klangquelle laufende Wiedergabe sauber beenden
+      const warAmSpielen = this.isPlaying;
+      this.stop();
+      if (warAmSpielen) this.play();
+    }
+    this.notify();
+  }
+
+  public getEngine(): 'geraet' | 'piper' {
+    return this.settings.engine === 'piper' ? 'piper' : 'geraet';
+  }
+
+  /** Aktuelle Stimmen-Einstellungen (Kopie) - für die Stimmen-Ansicht */
+  public getSettings(): VoiceSettings {
+    return { ...this.settings };
+  }
+
+  /**
+   * Wählt die Klangquelle. 'piper' nutzt die neuronalen Stimmen, die auf diesem
+   * Gerät liegen (kein Text verlässt das Gerät), 'geraet' nutzt die Systemstimmen.
+   */
+  public setEngine(engine: 'geraet' | 'piper') {
+    this.updateVoiceSettings({ engine });
+  }
+
+  public engineBereit(): boolean {
+    return this.getEngine() === 'piper' && !this.piperFehler;
+  }
+
+  private aktuellePiperVoice(speaker: 'hostA' | 'hostB'): string {
+    return (speaker === 'hostA' ? this.settings.piperHostAVoice : this.settings.piperHostBVoice) || '';
+  }
+
+  private speichereEinstellungen() {
+    try {
+      localStorage.setItem(this.SPEICHER_KEY, JSON.stringify(this.settings));
+    } catch {
+      /* Speicher nicht verfügbar - kein Beinbruch */
+    }
+  }
+
+  private ladeEinstellungen() {
+    try {
+      const roh = localStorage.getItem(this.SPEICHER_KEY);
+      if (roh) {
+        const gelesen = JSON.parse(roh) as Partial<VoiceSettings>;
+        this.settings = { ...this.settings, ...gelesen };
+        this.playbackRate = this.settings.playbackRate || 1.0;
+      }
+    } catch {
+      /* beschädigte Einstellungen ignorieren */
     }
   }
 
@@ -149,7 +237,10 @@ class TTSEngine {
       currentSegmentIndex: this.currentIndex,
       currentSegment,
       progressPercent: progress,
-      availableVoices: this.voices
+      availableVoices: this.voices,
+      isSynthesizing: this.piperBusy,
+      engine: this.getEngine(),
+      engineHinweis: this.piperFehler ? 'Neuronale Stimme nicht verfügbar - Gerätestimme übernimmt.' : undefined
     };
   }
 
@@ -174,10 +265,22 @@ class TTSEngine {
   }
 
   public play() {
-    if (!this.synth || this.segments.length === 0) return;
+    const neuronaleQuelle = this.getEngine() === 'piper';
+    if ((!this.synth && !neuronaleQuelle) || this.segments.length === 0) return;
+
+    // Neue Wiedergabe: nach einem Fehler darf die neuronale Stimme erneut antreten
+    this.piperFehler = false;
 
     if (this.isPaused) {
-      this.synth.resume();
+      if (this.piperAudio) {
+        this.isPaused = false;
+        this.isPlaying = true;
+        this.startWatchdog();
+        this.piperAudio.play().catch(() => this.stoppePiperAudio());
+        this.notify();
+        return;
+      }
+      this.synth?.resume();
       this.isPaused = false;
       this.isPlaying = true;
       this.startWatchdog();
@@ -193,8 +296,15 @@ class TTSEngine {
   }
 
   public pause() {
-    if (!this.synth) return;
     this.clearPendingTimer();
+    this.pausierePiperAudio();
+    if (!this.synth) {
+      this.isPaused = true;
+      this.isPlaying = false;
+      this.stopWatchdog();
+      this.notify();
+      return;
+    }
     this.synth.pause();
     this.isPaused = true;
     this.isPlaying = false;
@@ -203,10 +313,21 @@ class TTSEngine {
   }
 
   public resume() {
-    if (!this.synth) return;
-    this.synth.resume();
     this.isPaused = false;
     this.isPlaying = true;
+
+    if (this.piperAudio && !this.piperFehler) {
+      this.startWatchdog();
+      this.piperAudio.play().catch(() => this.stoppePiperAudio());
+      this.notify();
+      return;
+    }
+
+    if (!this.synth) {
+      this.notify();
+      return;
+    }
+    this.synth.resume();
     this.startWatchdog();
     this.notify();
   }
@@ -214,6 +335,7 @@ class TTSEngine {
   public stop() {
     this.clearPendingTimer();
     this.stopWatchdog();
+    this.stoppePiperAudio();
     if (this.synth) {
       this.synth.cancel();
     }
@@ -323,7 +445,12 @@ class TTSEngine {
   }
 
   private speakCurrentSegment() {
-    if (!this.synth || this.currentIndex >= this.segments.length) {
+    if (this.currentIndex >= this.segments.length) {
+      this.finishPlayback();
+      return;
+    }
+
+    if (!this.synth && this.getEngine() !== 'piper') {
       this.finishPlayback();
       return;
     }
@@ -336,7 +463,7 @@ class TTSEngine {
     this.currentSentenceIndex = 0;
 
     // Falls der Browser noch eine alte Queue hält, sicherstellen dass er empfangsbereit ist
-    if (this.synth.speaking || this.synth.pending) {
+    if (this.synth?.speaking || this.synth?.pending) {
       this.synth.cancel();
       // Kurzer Tick nach cancel(), um Chrome-interne Race-Conditions zu vermeiden
       setTimeout(() => {
@@ -350,13 +477,22 @@ class TTSEngine {
   }
 
   private speakCurrentSentence() {
-    if (!this.synth || !this.isPlaying || this.isPaused) return;
+    if (!this.isPlaying || this.isPaused) return;
 
     // Wenn alle Sätze dieses Segments gesprochen wurden:
     if (this.currentSentenceIndex >= this.currentSentences.length) {
       this.advanceToNextSegment();
       return;
     }
+
+    // Neuronale Stimme aus dem Gerätespeicher (Piper) - Text bleibt auf dem Gerät
+    const aktuelleSprecher = this.segments[this.currentIndex]?.speaker;
+    if (this.engineBereit() && aktuelleSprecher && this.aktuellePiperVoice(aktuelleSprecher)) {
+      void this.speakCurrentSentencePiper();
+      return;
+    }
+
+    if (!this.synth || !this.isPlaying || this.isPaused) return;
 
     const rawSentence = this.currentSentences[this.currentSentenceIndex];
     const segment = this.segments[this.currentIndex];
@@ -444,6 +580,153 @@ class TTSEngine {
       this.synth.speak(utterance);
     } catch (err) {
       console.warn('Synth speak error:', err);
+    }
+  }
+
+  /* ---------------------- Neuronale Wiedergabe (Stimmen vom Gerät) ---------------------- */
+
+  private pausierePiperAudio() {
+    try {
+      this.piperAudio?.pause();
+    } catch {
+      /* egal */
+    }
+  }
+
+  private stoppePiperAudio() {
+    if (!this.piperAudio) return;
+    try {
+      this.piperAudio.onended = null;
+      this.piperAudio.onerror = null;
+      this.piperAudio.pause();
+      this.piperAudio.currentTime = 0;
+    } catch {
+      /* egal */
+    }
+    this.piperAudio = null;
+  }
+
+  /** Liefert die Audiodatei eines Satzes - fertige Sätze kommen aus dem Zwischenspeicher */
+  private async piperUrl(text: string, voiceId: string): Promise<string> {
+    const schluessel = `${voiceId}::${text}`;
+    const vorhanden = this.piperCache.get(schluessel);
+    if (vorhanden) return vorhanden;
+
+    const blob = await synthese(text, voiceId);
+    const url = URL.createObjectURL(blob);
+    this.piperCache.set(schluessel, url);
+    this.piperCacheReihenfolge.push(schluessel);
+
+    // Zwischenspeicher begrenzen, älteste Aufnahme freigeben
+    while (this.piperCacheReihenfolge.length > 240) {
+      const alt = this.piperCacheReihenfolge.shift() as string;
+      const alteUrl = this.piperCache.get(alt);
+      if (alteUrl) URL.revokeObjectURL(alteUrl);
+      this.piperCache.delete(alt);
+    }
+    return url;
+  }
+
+  /** Sprechfertiger Satz: klarer Satzschluss hilft der neuronalen Stimme beim Rhythmus */
+  private piperSatzText(roh: string): string {
+    const sauber = (roh || '').trim();
+    if (!sauber) return '';
+    return /[.!?:]$/.test(sauber) ? sauber : `${sauber}.`;
+  }
+
+  private async speakCurrentSentencePiper() {
+    if (!this.isPlaying || this.isPaused) return;
+
+    if (this.currentSentenceIndex >= this.currentSentences.length) {
+      this.advanceToNextSegment();
+      return;
+    }
+
+    const segment = this.segments[this.currentIndex];
+    if (!segment) {
+      this.finishPlayback();
+      return;
+    }
+
+    const voiceId = this.aktuellePiperVoice(segment.speaker);
+    if (!voiceId) {
+      this.speakCurrentSentence();
+      return;
+    }
+
+    const text = this.piperSatzText(this.currentSentences[this.currentSentenceIndex]);
+    if (!text) {
+      this.currentSentenceIndex++;
+      void this.speakCurrentSentencePiper();
+      return;
+    }
+
+    const liegtBereit = await stimmeGeladen(voiceId).catch(() => false);
+    if (!liegtBereit) {
+      // Stimme wurde inzwischen entfernt -> Gerätestimmen übernehmen
+      this.speakCurrentSentence();
+      return;
+    }
+
+    this.piperBusy = true;
+    this.notify();
+
+    let url: string;
+    try {
+      url = await this.piperUrl(text, voiceId);
+    } catch (fehler) {
+      this.piperBusy = false;
+      console.warn('Neuronale Stimme nicht verfügbar, Gerätestimme übernimmt:', fehler);
+      this.piperFehler = true;
+      this.speakCurrentSentence();
+      return;
+    }
+
+    this.piperBusy = false;
+    if (!this.isPlaying || this.isPaused) return;
+
+    const audio = new Audio(url);
+    audio.playbackRate = Math.max(0.5, Math.min(2.0, this.playbackRate));
+    this.piperAudio = audio;
+
+    // Nächsten Satz im Hintergrund vorbereiten - so entsteht keine hörbare Lücke
+    void this.bereiteNaechstenSatzVor();
+
+    const weiter = () => {
+      this.piperAudio = null;
+      if (!this.isPlaying || this.isPaused) return;
+      this.currentSentenceIndex++;
+      this.notify();
+      void this.speakCurrentSentencePiper();
+    };
+    audio.onended = weiter;
+    audio.onerror = weiter;
+
+    try {
+      await audio.play();
+    } catch {
+      // Wiedergabe verweigert (z. B. fehlende Nutzeraktion) -> Gerätestimme übernimmt
+      this.piperAudio = null;
+      this.piperFehler = true;
+      this.speakCurrentSentence();
+    }
+  }
+
+  private async bereiteNaechstenSatzVor() {
+    const segment = this.segments[this.currentIndex];
+    if (!segment) return;
+    const naechster = this.currentSentenceIndex + 1;
+    if (naechster >= this.currentSentences.length) return;
+
+    const voiceId = this.aktuellePiperVoice(segment.speaker);
+    if (!voiceId) return;
+    const text = this.piperSatzText(this.currentSentences[naechster]);
+    if (!text) return;
+
+    try {
+      await this.piperUrl(text, voiceId);
+    } catch {
+      /* dann entsteht beim nächsten Satz eben eine kurze Pause */
     }
   }
 

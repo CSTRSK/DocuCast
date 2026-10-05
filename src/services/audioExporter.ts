@@ -5,6 +5,243 @@
  */
 
 import { PodcastItem } from '../types/podcast';
+import { synthese, stimmeGeladen } from './piperEngine';
+import { ttsEngine } from './ttsEngine';
+
+/* ---------------------------------------------------------------------------------------------
+ * Echter Audio-Export mit den neuronalen Stimmen vom Gerät.
+ *
+ * Die bisherige WAV-Datei war nur eine Tonkontur (der Browser kann Systemstimmen nicht
+ * mitschneiden). Mit den neuronalen Stimmen entsteht echtes gesprochenes Audio - die Sätze
+ * werden auf dem Gerät erzeugt, hintereinandergelegt und als WAV gespeichert.
+ * ------------------------------------------------------------------------------------------- */
+
+const ZIEL_RATE = 22050;
+const PAUSE_ABSCHNITT = 0.45;   // Sekunden zwischen zwei Beiträgen
+const PAUSE_SPRECHERWECHSEL = 0.7;
+
+/** Liest eine WAV-Datei (16-Bit-PCM) in Rohwerte ein */
+async function wavZuSamples(blob: Blob): Promise<{ rate: number; daten: Float32Array }> {
+  const puffer = await blob.arrayBuffer();
+  const sicht = new DataView(puffer);
+
+  if (sicht.byteLength < 44) throw new Error('Audiodatei ist unvollständig.');
+
+  // Chunks durchlaufen (fmt + data)
+  let offset = 12;
+  let rate = ZIEL_RATE;
+  let kanaele = 1;
+  let bits = 16;
+  let datenStart = -1;
+  let datenLaenge = 0;
+
+  while (offset + 8 <= sicht.byteLength) {
+    const id = String.fromCharCode(
+      sicht.getUint8(offset),
+      sicht.getUint8(offset + 1),
+      sicht.getUint8(offset + 2),
+      sicht.getUint8(offset + 3)
+    );
+    const groesse = sicht.getUint32(offset + 4, true);
+    const inhalt = offset + 8;
+
+    if (id === 'fmt ') {
+      kanaele = sicht.getUint16(inhalt + 2, true) || 1;
+      rate = sicht.getUint32(inhalt + 4, true) || ZIEL_RATE;
+      bits = sicht.getUint16(inhalt + 14, true) || 16;
+    } else if (id === 'data') {
+      datenStart = inhalt;
+      datenLaenge = Math.min(groesse, sicht.byteLength - inhalt);
+      break;
+    }
+    offset = inhalt + groesse + (groesse % 2);
+  }
+
+  if (datenStart < 0) throw new Error('Keine Audiodaten gefunden.');
+  if (bits !== 16) throw new Error(`Nur 16-Bit-Audio wird unterstützt (gefunden: ${bits} Bit).`);
+
+  const anzahl = Math.floor(datenLaenge / 2);
+  const roh = new Int16Array(puffer, datenStart, anzahl);
+  const daten = new Float32Array(Math.floor(anzahl / kanaele));
+  for (let i = 0; i < daten.length; i++) {
+    let summe = 0;
+    for (let k = 0; k < kanaele; k++) summe += roh[i * kanaele + k];
+    daten[i] = summe / kanaele / 32768;
+  }
+  return { rate, daten };
+}
+
+/** Einfache lineare Umskalierung der Abtastrate (16 kHz <-> 22 kHz) */
+function skaliereRate(daten: Float32Array, von: number, nach: number): Float32Array {
+  if (von === nach) return daten;
+  const laenge = Math.max(1, Math.round((daten.length * nach) / von));
+  const ergebnis = new Float32Array(laenge);
+  for (let i = 0; i < laenge; i++) {
+    const position = (i * von) / nach;
+    const links = Math.floor(position);
+    const rechts = Math.min(links + 1, daten.length - 1);
+    const anteil = position - links;
+    ergebnis[i] = daten[links] * (1 - anteil) + daten[rechts] * anteil;
+  }
+  return ergebnis;
+}
+
+function stille(sekunden: number, rate = ZIEL_RATE): Float32Array {
+  return new Float32Array(Math.round(sekunden * rate));
+}
+
+/** Kurzes Intro-Glöckchen (zwei Töne, weich ausklingend) */
+function introGlocke(rate = ZIEL_RATE): Float32Array {
+  const laenge = Math.round(rate * 1.1);
+  const daten = new Float32Array(laenge);
+  const toene: { f: number; start: number; dauer: number }[] = [
+    { f: 523.25, start: 0, dauer: 0.55 },
+    { f: 783.99, start: 0.32, dauer: 0.7 }
+  ];
+  for (const ton of toene) {
+    const von = Math.round(ton.start * rate);
+    const bis = Math.min(laenge, von + Math.round(ton.dauer * rate));
+    for (let i = von; i < bis; i++) {
+      const t = (i - von) / rate;
+      const huelle = Math.exp(-4.5 * t) * Math.min(1, t * 40);
+      daten[i] += Math.sin(2 * Math.PI * ton.f * t) * huelle * 0.22;
+    }
+  }
+  return daten;
+}
+
+function samplesZuWav(daten: Float32Array, rate = ZIEL_RATE): Blob {
+  const puffer = new ArrayBuffer(44 + daten.length * 2);
+  const sicht = new DataView(puffer);
+  const schreibeText = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) sicht.setUint8(offset + i, text.charCodeAt(i));
+  };
+
+  schreibeText(0, 'RIFF');
+  sicht.setUint32(4, 36 + daten.length * 2, true);
+  schreibeText(8, 'WAVE');
+  schreibeText(12, 'fmt ');
+  sicht.setUint32(16, 16, true);
+  sicht.setUint16(20, 1, true);
+  sicht.setUint16(22, 1, true);
+  sicht.setUint32(24, rate, true);
+  sicht.setUint32(28, rate * 2, true);
+  sicht.setUint16(32, 2, true);
+  sicht.setUint16(34, 16, true);
+  schreibeText(36, 'data');
+  sicht.setUint32(40, daten.length * 2, true);
+
+  let position = 44;
+  for (let i = 0; i < daten.length; i++) {
+    const wert = Math.max(-1, Math.min(1, daten[i]));
+    sicht.setInt16(position, wert < 0 ? wert * 0x8000 : wert * 0x7fff, true);
+    position += 2;
+  }
+  return new Blob([puffer], { type: 'audio/wav' });
+}
+
+/** Sind die neuronalen Stimmen einsatzbereit? */
+export async function neuralExportMoeglich(): Promise<boolean> {
+  try {
+    if (ttsEngine.getEngine() !== 'piper') return false;
+    const einstellungen = ttsEngine.getSettings();
+    if (!einstellungen.piperHostAVoice) return false;
+    return await stimmeGeladen(einstellungen.piperHostAVoice);
+  } catch {
+    return false;
+  }
+}
+
+/** Text in sprechbare Häppchen teilen (lange Beiträge überfordern die Stimme) */
+function haeppchen(text: string, maxZeichen = 320): string[] {
+  const saetze = text
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .filter((s) => s.trim().length > 0);
+
+  const ergebnis: string[] = [];
+  let aktuell = '';
+  for (const satz of saetze) {
+    if ((aktuell + ' ' + satz).trim().length > maxZeichen && aktuell) {
+      ergebnis.push(aktuell.trim());
+      aktuell = satz;
+    } else {
+      aktuell = `${aktuell} ${satz}`.trim();
+    }
+  }
+  if (aktuell.trim()) ergebnis.push(aktuell.trim());
+  return ergebnis.length > 0 ? ergebnis : [text.slice(0, maxZeichen)];
+}
+
+/**
+ * Erzeugt eine echte gesprochene Podcast-Datei mit den Stimmen vom Gerät.
+ * Der Text wird ausschließlich lokal verarbeitet.
+ */
+export async function generateNeuralPodcastWav(
+  podcast: PodcastItem,
+  onProgress?: (percent: number) => void
+): Promise<Blob> {
+  const einstellungen = ttsEngine.getSettings();
+  const stimmeA = einstellungen.piperHostAVoice || '';
+  const stimmeB = einstellungen.piperHostBVoice || stimmeA;
+  if (!stimmeA) throw new Error('Keine neuronale Stimme gewählt.');
+  const segmente = podcast.segments;
+  if (segmente.length === 0) throw new Error('Dieser Podcast hat keine Beiträge.');
+
+  onProgress?.(3);
+  const teile: Float32Array[] = [introGlocke()];
+  let letzterSprecher: string | null = null;
+
+  for (let i = 0; i < segmente.length; i++) {
+    const segment = segmente[i];
+    const voiceId = segment.speaker === 'hostA' ? stimmeA : stimmeB;
+    if (!voiceId) continue;
+
+    if (letzterSprecher !== null) {
+      teile.push(stille(letzterSprecher === segment.speaker ? PAUSE_ABSCHNITT : PAUSE_SPRECHERWECHSEL));
+    }
+    letzterSprecher = segment.speaker;
+
+    const stuecke = haeppchen(segment.text);
+    for (const stueck of stuecke) {
+      const wav = await synthese(stueck, voiceId);
+      const { rate, daten } = await wavZuSamples(wav);
+      teile.push(skaliereRate(daten, rate, ZIEL_RATE));
+    }
+    onProgress?.(5 + Math.round(((i + 1) / segmente.length) * 90));
+  }
+
+  const gesamt = teile.reduce((summe, teil) => summe + teil.length, 0);
+  const gemischt = new Float32Array(gesamt);
+  let position = 0;
+  for (const teil of teile) {
+    gemischt.set(teil, position);
+    position += teil.length;
+  }
+
+  onProgress?.(98);
+  const blob = samplesZuWav(gemischt, ZIEL_RATE);
+  onProgress?.(100);
+  return blob;
+}
+
+/**
+ * Export für die Oberfläche: nutzt die neuronale Stimme, wenn sie bereitliegt,
+ * sonst die Tonkontur - und sagt der Oberfläche, was entstanden ist.
+ */
+export async function generatePodcastWav(
+  podcast: PodcastItem,
+  onProgress?: (percent: number) => void
+): Promise<{ blob: Blob; art: 'neural' | 'ton' }> {
+  if (await neuralExportMoeglich()) {
+    try {
+      return { blob: await generateNeuralPodcastWav(podcast, onProgress), art: 'neural' };
+    } catch (fehler) {
+      console.warn('Neuronaler Export fehlgeschlagen, Tonkontur wird erzeugt:', fehler);
+    }
+  }
+  return { blob: await generateSynthesizedPodcastWav(podcast, onProgress), art: 'ton' };
+}
 
 export function exportScriptAsMarkdown(podcast: PodcastItem): string {
   let md = `# DocuCast: ${podcast.title}\n\n`;

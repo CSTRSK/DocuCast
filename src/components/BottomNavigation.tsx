@@ -1,7 +1,7 @@
 import React from 'react';
-import { PlusCircle, FileEdit, Headphones, Library, Radio } from 'lucide-react';
+import { PlusCircle, FileEdit, Headphones, Library, Radio, AudioLines } from 'lucide-react';
 
-export type AppTab = 'upload' | 'settings' | 'script' | 'player' | 'library';
+export type AppTab = 'upload' | 'settings' | 'script' | 'player' | 'library' | 'stimmen';
 
 interface BottomNavigationProps {
   currentTab: AppTab;
@@ -85,6 +85,19 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
         >
           <Library className="w-5 h-5" />
           <span className="text-[10px] tracking-tight">Bibliothek</span>
+        </button>
+
+        {/* Stimmen Tab */}
+        <button
+          onClick={() => onChangeTab('stimmen')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-2xl transition-all ${
+            currentTab === 'stimmen'
+              ? 'text-indigo-600 dark:text-indigo-400 font-bold scale-105'
+              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <AudioLines className="w-5 h-5" />
+          <span className="text-[10px] tracking-tight">Stimmen</span>
         </button>
       </div>
     </nav>

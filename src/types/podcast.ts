@@ -95,6 +95,11 @@ export interface VoiceSettings {
   hostBPitch: number; // 0.5 - 1.5
   hostBRate: number;  // 0.7 - 1.5
   playbackRate: number; // 0.75 - 2.0
+  /** 'geraet' = Stimmen des Geräts (Web Speech), 'piper' = neuronale Stimmen auf dem Gerät */
+  engine?: 'geraet' | 'piper';
+  /** Piper-Stimmen der beiden Sprecher (IDs aus data/piperVoices.ts) */
+  piperHostAVoice?: string;
+  piperHostBVoice?: string;
 }
 
 export interface ExtractionProgress {

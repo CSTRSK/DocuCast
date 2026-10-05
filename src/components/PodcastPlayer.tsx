@@ -3,7 +3,7 @@ import { PodcastItem } from '../types/podcast';
 import { ttsEngine, TTSState } from '../services/ttsEngine';
 import { WaveformVisualizer } from './WaveformVisualizer';
 import { Play, Pause, RotateCcw, RotateCw, Download, Check, Bookmark, Globe } from 'lucide-react';
-import { generateSynthesizedPodcastWav, downloadFile } from '../services/audioExporter';
+import { generatePodcastWav, downloadFile } from '../services/audioExporter';
 import { saveAudioBlob } from '../services/storage';
 import { G20TranslateModal } from './G20TranslateModal';
 
@@ -25,6 +25,7 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   const [isExportingAudio, setIsExportingAudio] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportDone, setExportDone] = useState(false);
+  const [exportArt, setExportArt] = useState<'neural' | 'ton' | null>(null);
   const [showTranslateModal, setShowTranslateModal] = useState(false);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const activeSegmentRef = useRef<HTMLDivElement>(null);
@@ -71,9 +72,10 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
       setExportProgress(10);
       setExportDone(false);
 
-      const wavBlob = await generateSynthesizedPodcastWav(podcast, (pct) => {
+      const { blob: wavBlob, art } = await generatePodcastWav(podcast, (pct) => {
         setExportProgress(pct);
       });
+      setExportArt(art);
 
       // Save into IndexedDB / OPFS
       await saveAudioBlob(podcast.id, wavBlob);
@@ -289,6 +291,13 @@ export const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             )}
           </button>
         </div>
+
+        {exportArt === 'ton' && !isExportingAudio && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl px-3 py-2 mt-2">
+            Die Datei enthält die Tonspur zum Skript. Echte Sprechstimmen bekommst du, wenn du unter
+            „Stimmen" eine neuronale Stimme aufs Gerät lädst.
+          </p>
+        )}
       </div>
 
       {/* Live Interactive Transcript */}

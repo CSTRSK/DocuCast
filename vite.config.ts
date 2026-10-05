@@ -37,6 +37,9 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,wasm,mjs}'],
+          // Die Laufzeit-Dateien der Sprachausgabe (ONNX/Phonemizer, ~29 MB) werden
+          // nicht vorab in den Cache gelegt - sie kommen on demand ueber den Browser-Cache.
+          globIgnores: ['**/voices-runtime/**'],
           // pdf.js bringt einen grossen Worker mit - der gehoert in den Cache, damit
           // die App nach dem ersten Besuch auch offline Dokumente lesen kann.
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,

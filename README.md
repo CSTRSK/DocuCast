@@ -23,7 +23,11 @@ bleibt.
 - **Sieben Erzählstile:** Deep Dive (~5–8 Min), Kompakt/TL;DR (~2–3 Min), Experten-Interview (~4–6 Min), Diskussion & Story (~5–7 Min), Kontroverse & Debatte (~4–6 Min), Tech-Deep-Dive (~5–8 Min), 2-Minuten News-Flash (~2 Min)
 - **Zwei Sprecher:** eigene Namen für Host A und Host B
 - **G20-Lokalisierung:** über 30 Sprachvarianten — Deutsch (Standard, Nord, Bayern, Österreich, Schweiz), Englisch (General American, UK, Australien, Schottland), Spanisch (u. a. Rioplatense-AR), Französisch (u. a. CA), dazu u. a. Japanisch, Koreanisch, Chinesisch, Hindi, Arabisch, Russisch, Türkisch, Indonesisch, Polnisch, Niederländisch. Mit der Landesauswahl wechseln Gesprächsführung und Moderatorennamen
-- **Vorlesen:** Web Speech API, automatische Stimmenwahl je Sprache, unterschiedliche Stimmen für beide Sprecher (wenn das Gerät zwei anbietet), Tempo 0,75×–2×, Sprünge von 15 Sekunden
+- **Vorlesen mit drei Klangquellen:**
+  1. **Gerätestimmen** (Web Speech API) – sofort einsatzbereit, kein Download, Klang je nach Gerät
+  2. **Neuronale Stimmen (Piper):** im Reiter „Stimmen" **aufs Gerät laden** – einmalig 60–110 MB, danach offline und deutlich natürlicher. Aus über 60 Sprachen mit zusammen 121 Stimmen (davon 75 mit dem aktuellen Phonemsatz). Deutsche Empfehlung: `thorsten-medium`, `thorsten_emotional-medium` (8 Sprecher), `mls-medium` (236 Sprecher)
+  3. **Eigene Stimme mitbringen:** eigene `.onnx` + `.onnx.json` hochladen – die App prüft sie sofort und nutzt sie wie eine eingebaute Stimme. **Direkte Download-Links** zu passenden Dateien stehen in der App (Hugging-Face-Spiegel der Piper-Stimmen), inklusive Übersicht über alle Stimmen
+- **Unterschiedliche Stimmen für beide Sprecher**, automatische Stimmenwahl je Sprache, Tempo 0,75×–2×, Sprünge von 15 Sekunden
 - **Transkript:** laufender Beitrag wird hervorgehoben, Tippen springt zur Stelle
 - **Bibliothek:** Podcasts lokal in IndexedDB, Favoriten, Löschen
 - **Export:** WAV (22,05 kHz, mono) sowie Skript als Markdown oder JSON
@@ -33,10 +37,37 @@ bleibt.
 ## Grenzen (ehrlich)
 
 - **Die Stimmen kommen vom Gerät.** Die Qualität hängt an der Sprachausgabe des Systems (Windows, Android, iOS, macOS, Linux klingen unterschiedlich); ohne installierte Stimme bleibt es still.
-- **Die WAV-Datei enthält keine Sprache.** Der Browser kann die System-Sprachausgabe nicht mitschneiden. Der Export liefert die selbst berechnete Tonspur des Dialogs: Intro-Gong, je Sprecher eine Tonhöhen-Kontur (130 Hz Host A, 210 Hz Host B, bandpassgefiltert), Übergangstöne — exakt in der Länge des Skripts. Gemessen: rund 7,85 MB für ein Fünf-Minuten-Skript. Für echte Sprachaufnahmen braucht es ein Aufnahmegerät am Rechner, das den Systemklang abgreift.
+- **Der Audio-Export hängt an der Klangquelle.** Mit neuronalen Stimmen entsteht eine **echte Sprachaufnahme**: die Sätze werden einzeln synthetisiert, mit Pausen und Intro-Gong zu einer WAV-Datei gesetzt (gemessen: 272 KB / 6,18 s für eine dreiteilige Prüffolge; 130 KB / 2,95 s für einen Satz). Mit **Gerätestimmen** bleibt es bei der selbst berechneten Tonspur (Intro-Gong plus Tonhöhen-Kontur, 130 Hz Host A / 210 Hz Host B) — der Browser kann die System-Sprachausgabe per Standard nicht mitschneiden. Die Oberfläche sagt nach dem Export, was entstanden ist.
+- **Stimmen der ersten Piper-Generation** (genau 130 Phoneme, u. a. alle `x_low`-Stimmen) passen nicht zur heutigen Aussprache-Laufzeit. Sie sind in der App standardmäßig ausgeblendet; wer sie einblendet, sieht nach dem Laden sofort „auf diesem Gerät nicht nutzbar". Von 121 Stimmen sind 75 nutzbar.
 - **Kein Server, also keine Synchronisation.** Wird der Browser-Speicher geleert oder das Gerät gewechselt, ist die Bibliothek weg — dafür ist der Export gedacht.
 - **Sehr lange Dokumente** erzeugen sehr viele Beiträge; dafür gibt es den Stil „Kompakt".
 - **Lokalisierung ohne Server übersetzt nur die Gesprächsführung.** Die App kann den Dialog in über 30 Sprachvarianten erzeugen — Begrüßung, Übergänge, Rückfragen, Verabschiedung und Moderatorennamen kommen in der Zielsprache, die **Inhaltssätze bleiben in der Sprache des Dokuments**. Ein durchgehend übersetzter Podcast bräuchte einen Übersetzungsdienst auf einem Server (mit Schlüssel) und würde den Dokumenttext aus dem Gerät schicken — genau das vermeidet diese App. Ein Hinweis darauf steht im Übersetzungsdialog.
+
+## Stimmen (neuronale Sprachausgabe)
+
+Die Sprachausgabe läuft **vollständig auf dem Gerät**: Der Dokumenttext wird lokal phonemisiert und
+synthetisiert (Piper-Modelle über ONNX Runtime WebAssembly im Browser). Es gibt keinen Serveraufruf
+mit Text, keinen Schlüssel und kein Konto.
+
+**Woher die Modelle kommen**
+
+1. **Eigener Spiegel zuerst:** `https://cstrsk.de/DocuCast/voices/` mit einem Verzeichnis
+   (`verzeichnis.json`), das die vorhandenen Stimmen samt Prüfsumme auflistet. Standardmäßig liegen
+   dort die zwei deutschen Startstimmen (`thorsten-medium`, `thorsten_emotional-medium`).
+   Der Hoster liefert keine Dateien über ~20 MB aus, deshalb liegen die großen Modelle **in 16-MB-Teilen**
+   (`.part1 … .partN`); die App setzt sie zusammen und prüft sie per **SHA-256**.
+2. **Hugging Face als Rückfall** (`diffusionstudio/piper-voices`) für alle weiteren der 121 Stimmen.
+
+**Laufzeitdateien** (ONNX Runtime + Piper-Phonemizer, ~39 MB) liegen unter
+`/DocuCast/voices-runtime/` — same-origin, dauerhaft zwischengespeichert, kein Fremd-CDN.
+
+**Eigene Stimme:** Beide Dateien nötig (`.onnx` Modell und `.onnx.json` Konfiguration). Nach dem
+Import läuft automatisch ein Test (`selbstTest`); das Ergebnis steht als „geprüft" bzw. „auf diesem
+Gerät nicht nutzbar" in der Liste. Die Downloads stammen von den Modell-Karten der Piper-Stimmen;
+Modelle: MIT, deutsche `thorsten`-Stimmen: CC0.
+
+**Lizenz:** DocuCast steht unter AGPL-3.0, die Stimmen-Modelle von Piper unter MIT. Die Stimmen
+sind **nicht** Teil des Repositories — sie werden zur Laufzeit auf das Gerät geladen.
 
 ## Entwicklung
 
@@ -55,10 +86,21 @@ Ordner kontrolliert und nicht die ganze Domain.
 ### Deployment in einen Unterordner
 
 ```bash
-python3 scripts/apply_csp_htaccess.py --dist dist --index index.html --csp "default-src 'self'; …"
+npm run build
+# CSP/Header NACH dem Build setzen -- sonst steht die alte Policy im ausgelieferten index.html
+python3 scripts/apply_csp_htaccess.py --dist dist --index dist/index.html
 HOST=… USER=… FTP_PASS=… python3 scripts/deploy_dist_ftps.py \
-    --local dist --remote <account>/DocuCast --verify-base https://cstrsk.de/DocuCast/
+    --local dist --remote cstrsk.de/DocuCast --verify-base https://cstrsk.de/DocuCast/
 ```
+
+Für die neuronale Sprachausgabe ist die CSP erweitert: `script-src … 'wasm-unsafe-eval'`,
+`worker-src 'self' blob:` sowie (nur als Rückfall) `connect-src` zu Hugging Face und den
+CDNs. Die Laufzeit- und Modell-Dateien selbst kommen **same-origin** von cstrsk.de.
+
+**Web-Wurzel und große Dateien:** Beim FTPS-Zugang ist der **Web-Wurzelordner `cstrsk.de/`**
+(oft `/html/` erreichbar), nicht das FTP-Hauptverzeichnis. Der Hoster liefert per HTTP keine Dateien
+über ~20 MB aus — große Stimmen deshalb in Teile zerlegen (`*.part1 …`, dazu `.parts.json` oder
+Eintrag in `verzeichnis.json`).
 
 `scripts/deploy_dist_ftps.py` liest die Zugangsdaten **nur** aus der Umgebung, es stehen keine
 Zugangsdaten im Repository. Das Skript legt fehlende Ordner an (absolute Pfade — relative `MKD`

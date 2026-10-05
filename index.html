@@ -60,7 +60,7 @@
         } catch (e) {}
       })();
     </script>
-      <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' https://github.com https://objects.githubusercontent.com https://huggingface.co https://*.hf.co https://cdn-lfs.huggingface.co https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   </head>
   <body class="antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200">
     <div id="root"></div>

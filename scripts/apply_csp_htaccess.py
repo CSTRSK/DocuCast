@@ -8,6 +8,14 @@ Nach JEDEM Build erneut ausfuehren (der Build leert dist/).
 
 Ohne --csp gilt die Standard-Policy fuer diese App: eigene Dateien, Google Fonts,
 Blob-/Data-URLs fuer die im Browser erzeugten Exporte (PNG/GIF) und Bilder.
+
+Seit dem Stimmen-Einbau (neuronale Sprachausgabe) zusaetzlich noetig:
+  * script-src 'wasm-unsafe-eval'  -> ONNX-Laufzeit darf WebAssembly uebersetzen
+  * worker-src 'self' blob:        -> Piper laeuft in eigenen Arbeitsthreads
+  * connect-src huggingface.co     -> nur als Rueckfall, falls die Stimme nicht
+                                      schon auf dem Geraet liegt (Modelle sind
+                                      normalerweise unter voices-runtime bzw. im
+                                      Geraetespeicher und damit same-origin)
 """
 import argparse
 import os
@@ -19,8 +27,11 @@ DEFAULT_CSP = (
     "img-src 'self' data: blob:; "
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "font-src 'self' data: https://fonts.gstatic.com; "
-    "script-src 'self' 'unsafe-inline'; "
-    "connect-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; "
+    "worker-src 'self' blob:; "
+    "child-src 'self' blob:; "
+    "connect-src 'self' https://huggingface.co https://*.hf.co https://cdn-lfs.huggingface.co "
+    "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
     "media-src 'self' blob: data:; "
     "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
 )
@@ -64,6 +75,25 @@ def main() -> int:
         with open(os.path.join(assets, ".htaccess"), "w", encoding="utf-8") as f:
             f.write(klein)
         print(f"  geschrieben: {args.dist}/assets/.htaccess")
+
+    # Laufzeit-Dateien der Sprachausgabe duerfen dauerhaft zwischengespeichert werden
+    # (versionsstabiler Dateiname, ~29 MB - kein erneutes Laden noetig).
+    laufzeit = os.path.join(args.dist, "voices-runtime")
+    if os.path.isdir(laufzeit):
+        dauerhaft = (
+            "# Automatisch erzeugt von scripts/apply_csp_htaccess.py\n"
+            "Options -Indexes\n"
+            "<IfModule mod_headers.c>\n"
+            "  Header always set Cache-Control \"public, max-age=31536000, immutable\"\n"
+            "</IfModule>\n"
+            "<IfModule mod_mime.c>\n"
+            "  AddType application/wasm .wasm\n"
+            "  AddType application/octet-stream .data\n"
+            "</IfModule>\n"
+        )
+        with open(os.path.join(laufzeit, ".htaccess"), "w", encoding="utf-8") as f:
+            f.write(dauerhaft)
+        print(f"  geschrieben: {args.dist}/voices-runtime/.htaccess")
 
     if args.index and os.path.isfile(args.index):
         # frame-ancestors ist per Meta-Tag wirkungslos -> aus der Meta-Variante entfernen
