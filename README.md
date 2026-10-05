@@ -60,6 +60,8 @@ mit Text, keinen Schlüssel und kein Konto.
 
 **Laufzeitdateien** (ONNX Runtime + Piper-Phonemizer, ~39 MB) liegen unter
 `/DocuCast/voices-runtime/` — same-origin, dauerhaft zwischengespeichert, kein Fremd-CDN.
+Sie liegen im Repository unter `public/voices-runtime/` (Herkunft: `onnxruntime-web` 1.18.0 und
+`@diffusionstudio/piper-wasm` 1.0.0, beide MIT) und werden mit jedem Build mit ausgeliefert.
 
 **Eigene Stimme:** Beide Dateien nötig (`.onnx` Modell und `.onnx.json` Konfiguration). Nach dem
 Import läuft automatisch ein Test (`selbstTest`); das Ergebnis steht als „geprüft" bzw. „auf diesem
