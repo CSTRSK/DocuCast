@@ -1,0 +1,9 @@
+# Automatisch erzeugt von scripts/apply_csp_htaccess.py
+Options -Indexes
+<IfModule mod_headers.c>
+  Header always set Cache-Control "public, max-age=31536000, immutable"
+</IfModule>
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType application/octet-stream .data
+</IfModule>

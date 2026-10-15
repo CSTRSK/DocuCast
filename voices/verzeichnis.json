@@ -1,0 +1,22 @@
+{
+ "de_DE-thorsten-medium.onnx": {
+  "teile": 4,
+  "groesse": 63201294,
+  "sha256": "7e64762d8e5118bb578f2eea6207e1a35a8e0c30595010b666f983fc87bb7819"
+ },
+ "de_DE-thorsten_emotional-medium.onnx": {
+  "teile": 5,
+  "groesse": 76745905,
+  "sha256": "c1764e652266cd6dcebf1b95c61973df5970a5f5272e94b655ff1ddf9a99d1ff"
+ },
+ "de_DE-thorsten-medium.onnx.json": {
+  "teile": 1,
+  "groesse": 4819,
+  "sha256": "974adee790533adb273a1ac88f49027d2a1b8f0f2cf4905954a4791e79264e85"
+ },
+ "de_DE-thorsten_emotional-medium.onnx.json": {
+  "teile": 1,
+  "groesse": 5031,
+  "sha256": "92895b9e99f7cfc13f4a9879da615c3d6e0baa4d660e26d7b685abdd27a6d1d3"
+ }
+}
